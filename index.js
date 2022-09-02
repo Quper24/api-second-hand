@@ -1,6 +1,7 @@
 // импорт стандартных библиотек Node.js
-const { readFileSync } = require('fs');
-const { createServer } = require('http');
+const {readFileSync} = require('fs');
+const {createServer} = require('http');
+
 
 // файл для базы данных
 const DB_FILE = process.env.DB_FILE || './db.json';
@@ -20,20 +21,58 @@ class ApiError extends Error {
   }
 }
 
+function shuffle(startArray) {
+  const array = [...startArray];
+  for (let i = array.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+/**
+ * Фильтрует список товаров по дисконту и возвращает случайных 16 товаров
+ * @param {[{discountPrice: number}]} [goods] - товары
+ * @returns {{ id: string, title: string, price: number, discountPrice: number, description: Object[],
+ * category: string, image: string}[]} Массив товаров
+ */
+
+function randomGoods(goods) {
+  const discountGoods = goods.filter(item => item.discountPrice);
+  const discountGoodsRandom = shuffle(discountGoods);
+  if (discountGoodsRandom.length > 16) {
+    discountGoodsRandom.length = 16;
+  }
+  return discountGoodsRandom;
+}
+
 
 /**
  * Возвращает список товаров из базы данных
- * @param {{ search: string }} [params] - Поисковая строка
+ * @param {{ search: string, category: string, list: string }} [params] - Поисковая строка
  * @returns {{ id: string, title: string, price: number, discountPrice: number, description: Object[],
  * category: string, image: string}[]} Массив товаров
  */
 function getGoodsList(params = {}) {
+  console.log(params)
   const goods = JSON.parse(readFileSync(DB_FILE) || '[]');
   if (params.search) {
     const search = params.search.trim().toLowerCase();
-    return goods.filter(item =>  item.title.toLowerCase().includes(search));
+    return goods.filter(item => item.title.toLowerCase().includes(search));
   }
-  return goods;
+
+  if (params.category) {
+    const category = params.category.trim().toLowerCase();
+    const regExp = new RegExp(`^${category}$`);
+    return goods.filter(item => regExp.test(item.category.toLowerCase()));
+  }
+
+  if (params.list) {
+    const list = params.list.trim().toLowerCase();
+    return goods.filter(item => list.includes(item.id));
+  }
+
+  return randomGoods(goods);
 }
 
 
@@ -45,17 +84,16 @@ function getGoodsList(params = {}) {
  * category: string, image: string}} Объект клиента
  */
 function getItems(itemId) {
-  const item = getGoodsList().find(({ id }) => {
-    return id === itemId
-  });
-  if (!item) throw new ApiError(404, { message: 'Item Not Found' });
+  const goods = JSON.parse(readFileSync(DB_FILE) || '[]');
+  const item = goods.find(({id}) => id === itemId);
+  console.log(itemId)
+  if (!item) throw new ApiError(404, {message: 'Item Not Found'});
   return item;
 }
 
 
-
 // создаём HTTP сервер, переданная функция будет реагировать на все запросы к нему
-module.exports = createServer(async (req, res) => {
+module.exports = server = createServer(async (req, res) => {
   // req - объект с информацией о запросе, res - объект для управления отправляемым ответом
 
   // этот заголовок ответа указывает, что тело ответа будет в JSON формате
@@ -77,14 +115,13 @@ module.exports = createServer(async (req, res) => {
   // если URI не начинается с нужного префикса - можем сразу отдать 404
   if (!req.url || !req.url.startsWith(URI_PREFIX)) {
     res.statusCode = 404;
-    res.end(JSON.stringify({ message: 'Not Found' }));
+    res.end(JSON.stringify({message: 'Not Found'}));
     return;
   }
 
   // убираем из запроса префикс URI, разбиваем его на путь и параметры
   const [uri, query] = req.url.substr(URI_PREFIX.length).split('?');
   const queryParams = {};
-
   // параметры могут отсутствовать вообще или иметь вид a=b&b=c
   // во втором случае наполняем объект queryParams { a: 'b', b: 'c' }
   if (query) {
@@ -118,19 +155,22 @@ module.exports = createServer(async (req, res) => {
     } else {
       // если что-то пошло не так - пишем об этом в консоль и возвращаем 500 ошибку сервера
       res.statusCode = 500;
-      res.end(JSON.stringify({ message: 'Server Error' }));
-      console.error(err);
+      res.end(JSON.stringify({message: 'Server Error'}));
     }
   }
 })
   // выводим инструкцию, как только сервер запустился...
   .on('listening', () => {
+
     if (process.env.NODE_ENV !== 'test') {
       console.log(`Сервер CRM запущен. Вы можете использовать его по адресу http://localhost:${PORT}`);
       console.log('Нажмите CTRL+C, чтобы остановить сервер');
       console.log('Доступные методы:');
-      console.log(`GET ${URI_PREFIX} - получить список товаров, в query параметр search можно передать поисковый запрос`);
+      console.log(`GET ${URI_PREFIX} - получить список товаров`);
       console.log(`GET ${URI_PREFIX}/{id} - получить товар по его ID`);
+      console.log(`GET ${URI_PREFIX}?{search=""} - найти товар по названию`);
+      console.log(`GET ${URI_PREFIX}?{category=""} - получить товар по его категории`);
+      console.log(`GET ${URI_PREFIX}?{list="{id},{id}"} - получить товары по id`);
     }
   })
   // ...и вызываем запуск сервера на указанном порту
