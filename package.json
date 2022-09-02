@@ -1,0 +1,19 @@
+{
+  "name": "api-second-hand",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maksim-leskin/api-second-hand.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/maksim-leskin/api-second-hand/issues"
+  },
+  "homepage": "https://github.com/maksim-leskin/api-second-hand#readme"
+}
